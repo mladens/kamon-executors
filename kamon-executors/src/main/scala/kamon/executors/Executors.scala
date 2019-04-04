@@ -18,13 +18,15 @@ package executors
 
 import java.util.concurrent.{Callable, ExecutorService, ThreadPoolExecutor, TimeUnit, ForkJoinPool => JavaForkJoinPool}
 
+import kamon.jsr166.LongAdder
+
 import scala.concurrent.forkjoin.{ForkJoinPool => ScalaForkJoinPool}
-import kamon.metric.{LongAdderCounter, MeasurementUnit}
-import kamon.util.{DifferentialSource, Registration}
+import kamon.metric.Counter
+import kamon.module.Module.Registration
+import kamon.tag.TagSet
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
-
 import scala.util.Try
 
 object Executors {
@@ -55,9 +57,9 @@ object Executors {
   }
 
   def register(name: String, executor: ExecutorService): Registration =
-    register(name, Map.empty[String, String], executor)
+    register(name, TagSet.Empty, executor)
 
-  def register(name: String, tags: Tags, executor: ExecutorService): Registration = executor match {
+  def register(name: String, tags: TagSet, executor: ExecutorService): Registration = executor match {
     case executor: ExecutorService if isAssignableTo(executor, DelegatedExecutor)     => register(name, tags, unwrap(executor))
     case executor: ExecutorService if isAssignableTo(executor, FinalizableDelegated)  => register(name, tags, unwrap(executor))
     case executor: ExecutorService if isAssignableTo(executor, DelegateScheduled)     => register(name, tags, unwrap(executor))
@@ -70,41 +72,42 @@ object Executors {
       fakeRegistration
   }
 
-  def register(name: String, tags: Tags, sampler: ExecutorSampler): Registration = {
+  def register(name: String, tags: TagSet, sampler: ExecutorSampler): Registration = {
     val samplingInterval = Kamon.config().getDuration("kamon.executors.sample-interval")
     val scheduledFuture = Kamon.scheduler().scheduleAtFixedRate(sampleTask(sampler), samplingInterval.toMillis, samplingInterval.toMillis, TimeUnit.MILLISECONDS)
 
     new Registration {
-      override def cancel(): Boolean = {
+      override def cancel(): Unit = {
         Try {
           scheduledFuture.cancel(false)
           sampler.cleanup()
         }.failed.map { ex =>
-          logger.error(s"Failed to cancel registration for executor [name=${name}, tags=${tags.prettyPrint}]", ex)
-        }.isFailure
+          logger.error(s"Failed to cancel registration for executor [name=${name}, tags=${tags.toString()}]", ex)
+        }
+        ()
       }
     }
   }
 
   private val fakeRegistration = new Registration {
-    override def cancel(): Boolean = false
+    override def cancel(): Unit = ()
   }
 
   private def isAssignableTo(executor: ExecutorService, expectedClass: Class[_]): Boolean =
     expectedClass.isAssignableFrom(executor.getClass)
 
-  private def threadPoolSampler(name: String, tags: Tags, pool: ThreadPoolExecutor): ExecutorSampler = new ExecutorSampler {
+  private def threadPoolSampler(name: String, tags: TagSet, pool: ThreadPoolExecutor): ExecutorSampler = new ExecutorSampler {
     val poolMetrics = Metrics.threadPool(name, tags)
-    val taskCountSource = DifferentialSource(() => pool.getTaskCount)
-    val completedTaskCountSource = DifferentialSource(() => pool.getCompletedTaskCount)
+    val taskCountSource = Counter.delta(() => pool.getTaskCount)
+    val completedTaskCountSource = Counter.delta(() => pool.getCompletedTaskCount)
 
     def sample(): Unit = {
       poolMetrics.poolMin.set(pool.getCorePoolSize)
       poolMetrics.poolMax.set(pool.getMaximumPoolSize)
       poolMetrics.poolSize.record(pool.getPoolSize)
       poolMetrics.activeThreads.record(pool.getActiveCount)
-      poolMetrics.submittedTasks.increment(taskCountSource.get())
-      poolMetrics.processedTasks.increment(completedTaskCountSource.get())
+      taskCountSource.accept(poolMetrics.submittedTasks)
+      completedTaskCountSource.accept(poolMetrics.processedTasks)
       poolMetrics.queuedTasks.record(pool.getQueue.size())
       poolMetrics.corePoolSize.set(pool.getCorePoolSize())
     }
@@ -113,11 +116,11 @@ object Executors {
       poolMetrics.cleanup()
   }
 
-  private def forkJoinPoolSampler(name: String, tags: Tags, pool: InstrumentedExecutorService[_]): ExecutorSampler = new ExecutorSampler {
+  private def forkJoinPoolSampler(name: String, tags: TagSet, pool: InstrumentedExecutorService[_]): ExecutorSampler = new ExecutorSampler {
     val poolMetrics = Metrics.forkJoinPool(name, tags)
 
-    val taskCountSource = DifferentialSource(() => pool.submittedTasks)
-    val completedTaskCountSource = DifferentialSource(() => pool.processedTasks)
+    val taskCountSource = Counter.delta(() => pool.submittedTasks)
+    val completedTaskCountSource = Counter.delta(() => pool.processedTasks)
 
     def sample(): Unit = {
       poolMetrics.poolMax.set(pool.maxThreads)
@@ -125,8 +128,8 @@ object Executors {
       poolMetrics.parallelism.set(pool.parallelism)
       poolMetrics.poolSize.record(pool.poolSize)
       poolMetrics.activeThreads.record(pool.activeThreads)
-      poolMetrics.submittedTasks.increment(taskCountSource.get())
-      poolMetrics.processedTasks.increment(completedTaskCountSource.get())
+      taskCountSource.accept(poolMetrics.submittedTasks)
+      completedTaskCountSource.accept(poolMetrics.processedTasks)
       poolMetrics.queuedTasks.record(pool.queuedTasks)
     }
 
@@ -198,12 +201,12 @@ object Executors {
   class InstrumentedExecutorService[T <: ExecutorService](wrapped: T)(implicit metrics: ForkJoinPoolMetrics[T]) extends ExecutorService {
 
 
-    private var submittedTasksCounter: LongAdderCounter = new LongAdderCounter("", Map.empty, MeasurementUnit.none)
-    private var completedTasksCounter: LongAdderCounter = new LongAdderCounter("", Map.empty, MeasurementUnit.none)
+    private var submittedTasksCounter: LongAdder = new LongAdder
+    private var completedTasksCounter: LongAdder = new LongAdder
 
 
-    def submittedTasks = submittedTasksCounter.snapshot(false).value
-    def processedTasks = completedTasksCounter.snapshot(false).value
+    def submittedTasks = submittedTasksCounter.longValue()
+    def processedTasks = completedTasksCounter.longValue()
 
     def minThreads    = wrapped.minThreads
     def maxThreads    = wrapped.maxThreads
@@ -232,12 +235,12 @@ object Executors {
     override def isTerminated = wrapped.isTerminated
 
     override def invokeAll[T](tasks: java.util.Collection[_ <: Callable[T]]) = {
-      submittedTasksCounter.increment(tasks.size())
+      submittedTasksCounter.add(tasks.size())
       wrapped.invokeAll(tasks.asScala.map(task => wrapCallable(task, completedTasksCounter)).asJavaCollection)
     }
 
     override def invokeAll[T](tasks: java.util.Collection[_ <: Callable[T]], timeout: Long, unit: TimeUnit) = {
-      submittedTasksCounter.increment(tasks.size())
+      submittedTasksCounter.add(tasks.size())
       wrapped.invokeAll(tasks.asScala.map(task => wrapCallable(task, completedTasksCounter)).asJavaCollection,timeout, unit)
     }
 
@@ -255,7 +258,7 @@ object Executors {
 
     override def execute(command: Runnable) = wrapped.execute(wrapRunnable(command, completedTasksCounter))
 
-    private def wrapCallable[T](task: Callable[T], metric: LongAdderCounter): Callable[T] = new Callable[T] {
+    private def wrapCallable[T](task: Callable[T], metric: LongAdder): Callable[T] = new Callable[T] {
       override def call(): T = {
         val result = try {
           task.call()
@@ -264,7 +267,7 @@ object Executors {
       }
     }
 
-    private def wrapRunnable(task: Runnable, metric: LongAdderCounter): Runnable = new Runnable {
+    private def wrapRunnable(task: Runnable, metric: LongAdder): Runnable = new Runnable {
       override def run(): Unit = {
         try {
           task.run()
