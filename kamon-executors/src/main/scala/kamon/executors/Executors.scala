@@ -22,12 +22,12 @@ import kamon.jsr166.LongAdder
 
 import scala.concurrent.forkjoin.{ForkJoinPool => ScalaForkJoinPool}
 import kamon.metric.Counter
-import kamon.module.Module.Registration
 import kamon.tag.TagSet
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
 import scala.util.Try
+import java.io.Closeable
 
 object Executors {
   private val logger = LoggerFactory.getLogger("kamon.executors.Executors")
@@ -56,10 +56,10 @@ object Executors {
     def cleanup(): Unit
   }
 
-  def register(name: String, executor: ExecutorService): Registration =
+  def register(name: String, executor: ExecutorService): Closeable =
     register(name, TagSet.Empty, executor)
 
-  def register(name: String, tags: TagSet, executor: ExecutorService): Registration = executor match {
+  def register(name: String, tags: TagSet, executor: ExecutorService): Closeable = executor match {
     case executor: ExecutorService if isAssignableTo(executor, DelegatedExecutor)     => register(name, tags, unwrap(executor))
     case executor: ExecutorService if isAssignableTo(executor, FinalizableDelegated)  => register(name, tags, unwrap(executor))
     case executor: ExecutorService if isAssignableTo(executor, DelegateScheduled)     => register(name, tags, unwrap(executor))
@@ -72,12 +72,12 @@ object Executors {
       fakeRegistration
   }
 
-  def register(name: String, tags: TagSet, sampler: ExecutorSampler): Registration = {
+  def register(name: String, tags: TagSet, sampler: ExecutorSampler): Closeable = {
     val samplingInterval = Kamon.config().getDuration("kamon.executors.sample-interval")
     val scheduledFuture = Kamon.scheduler().scheduleAtFixedRate(sampleTask(sampler), samplingInterval.toMillis, samplingInterval.toMillis, TimeUnit.MILLISECONDS)
 
-    new Registration {
-      override def cancel(): Unit = {
+    new Closeable {
+      override def close(): Unit = {
         Try {
           scheduledFuture.cancel(false)
           sampler.cleanup()
@@ -89,8 +89,8 @@ object Executors {
     }
   }
 
-  private val fakeRegistration = new Registration {
-    override def cancel(): Unit = ()
+  private val fakeRegistration = new Closeable {
+    override def close(): Unit = ()
   }
 
   private def isAssignableTo(executor: ExecutorService, expectedClass: Class[_]): Boolean =
