@@ -18,13 +18,10 @@ package kamon.executors
 import org.scalatest.{Matchers, WordSpec}
 import java.util.concurrent.{Executors => JavaExecutors, ForkJoinPool => JavaForkJoinPool}
 
-import kamon.testkit.MetricInspection
 import Metrics._
-import kamon.Kamon
+import kamon.testkit.MetricInspection
 
-import scala.concurrent.forkjoin.{ForkJoinPool => ScalaForkJoinPool}
-
-class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspection {
+class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspection.Syntax {
 
   "the Executors registration function" should {
     "accept all types of known executors" in {
@@ -38,7 +35,7 @@ class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspec
       val registeredUThreadPool = Executors.register("unconfigurable-thread-pool", JavaExecutors.unconfigurableExecutorService(JavaExecutors.newFixedThreadPool(1)))
       val registeredUScheduled = Executors.register("unconfigurable-scheduled-thread-pool", JavaExecutors.unconfigurableScheduledExecutorService(JavaExecutors.newScheduledThreadPool(1)))
 
-      Threads.valuesForTag("name") should contain only(
+      threadsMetric.tagValues("name") should contain only(
         "fjp",
         "thread-pool",
         "scheduled-thread-pool",
@@ -48,18 +45,18 @@ class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspec
         "unconfigurable-scheduled-thread-pool"
       )
 
-      registeredForkJoin.cancel()
-      registeredThreadPool.cancel()
-      registeredScheduled.cancel()
-      registeredSingle.cancel()
-      registeredSingleScheduled.cancel()
-      registeredUThreadPool.cancel()
-      registeredUScheduled.cancel()
+      registeredForkJoin.close()
+      registeredThreadPool.close()
+      registeredScheduled.close()
+      registeredSingle.close()
+      registeredSingleScheduled.close()
+      registeredUThreadPool.close()
+      registeredUScheduled.close()
 
-      Threads.valuesForTag("name") shouldBe empty
-      Tasks.valuesForTag("name") shouldBe empty
-      Pool.valuesForTag("name") shouldBe empty
-      Queue.valuesForTag("name") shouldBe empty
+      threadsMetric.tagValues("name") shouldBe empty
+      tasksMetric.tagValues("name") shouldBe empty
+      poolMetric.tagValues("name") shouldBe empty
+      queueMetric.tagValues("name") shouldBe empty
 
     }
   }

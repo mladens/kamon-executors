@@ -15,7 +15,7 @@
 
 package kamon.executors
 
-import kamon.metric.{Counter, Gauge, Histogram}
+import kamon.metric.{Counter, Gauge, Histogram, Metric}
 import kamon.tag.TagSet
 import kamon.Kamon
 
@@ -27,10 +27,11 @@ object Metrics {
   def queue(tpe: String, name: String): Histogram = Kamon.histogram("executor.queue").withTag("type", tpe).withTag("name", name)
 
   def forkJoinPool(name: String, tags: TagSet): ForkJoinPoolMetrics = {
-    val Pool = pool("fjp", name)
-    val Threads = threads("fjp", name)
-    val Tasks = tasks("fjp", name)
-    val Queue = queue("fjp", name)
+    val poolType = "fjp"
+    val Pool = pool(poolType, name)
+    val Threads = threads(poolType, name)
+    val Tasks = tasks(poolType, name)
+    val Queue = queue(poolType, name)
 
     ForkJoinPoolMetrics(
       Pool.withTag("setting", "min"),

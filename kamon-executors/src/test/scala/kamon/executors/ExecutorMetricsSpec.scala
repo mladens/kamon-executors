@@ -17,13 +17,15 @@
 
 package kamon.executors
 
+import java.io.Closeable
 import java.util.UUID
 
-import kamon.testkit.MetricInspection
+import kamon.testkit.{InstrumentInspection, MetricInspection}
 import org.scalatest.{Matchers, WordSpec}
 import java.util.concurrent.{ExecutorService, ForkJoinPool, ThreadPoolExecutor, Executors => JavaExecutors}
 
-import kamon.util.Registration
+import kamon.Kamon
+import kamon.tag.TagSet
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Millis, Span}
 
@@ -31,31 +33,29 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, Promise}
 
 
-class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection with Eventually {
+class ExecutorMetricsSpec extends WordSpec with Matchers with InstrumentInspection.Syntax with MetricInspection.Syntax with Eventually {
 
 
   implicit override val patienceConfig =
     PatienceConfig(timeout = scaled(Span(2000, Millis)), interval = scaled(Span(20, Millis)))
 
   class ExecutorMetrics(name: String, tpe: String) {
-    private val poolTags = Map(
-      "name" -> name,
-      "type" -> tpe
-    )
-    def poolMin(reset: Boolean = false) = Metrics.Pool.refine(poolTags + ("setting" -> "min")).value(reset)
-    def poolMax(reset: Boolean = false) = Metrics.Pool.refine(poolTags + ("setting" -> "max")).value(reset)
 
-    def threadsTotal(reset: Boolean = false) = Metrics.Threads.refine(poolTags + ("state" -> "total")).distribution(reset)
-    def threadsActive(reset: Boolean = false) = Metrics.Threads.refine(poolTags + ("state" -> "active")).distribution(reset)
 
-    def tasksSubmitted(reset: Boolean = false) = Metrics.Tasks.refine(poolTags + ("state" -> "submitted")).value(reset)
-    def tasksCompleted(reset: Boolean = false) = Metrics.Tasks.refine(poolTags + ("state" -> "completed")).value(reset)
+    def poolMin(reset: Boolean = false) = Metrics.pool(tpe, name).withTag("setting", "min").value(reset)
+    def poolMax(reset: Boolean = false) = Metrics.pool(tpe, name).withTag("setting" , "max").value(reset)
 
-    def queue(reset: Boolean = false) = Metrics.Queue.refine(poolTags).distribution(reset)
+    def threadsTotal(reset: Boolean = false) = Metrics.threads(tpe, name).withTag("state", "total").distribution(reset)
+    def threadsActive(reset: Boolean = false) = Metrics.threads(tpe, name).withTag("state", "active").distribution(reset)
 
-    def poolParallelism(reset: Boolean = false) = Metrics.Pool.refine(poolTags + ("setting" -> "parallelism")).value(reset)
+    def tasksSubmitted(reset: Boolean = false) = Metrics.tasks(tpe, name).withTag("state", "submitted").value(reset)
+    def tasksCompleted(reset: Boolean = false) = Metrics.tasks(tpe, name).withTag("state", "completed").value(reset)
 
-    def poolCoreSize(reset: Boolean = false) = Metrics.Pool.refine(poolTags + ("setting" ->  "corePoolSize")).value(reset)
+    def queue(reset: Boolean = false) = Metrics.queue(tpe, name).distribution(reset)
+
+    def poolParallelism(reset: Boolean = false) = Metrics.pool(tpe, name).withTag("setting", "parallelism").value(reset)
+
+    def poolCoreSize(reset: Boolean = false) = Metrics.pool(tpe, name).withTag("setting", "corePoolSize").value(reset)
   }
 
   "the ExecutorServiceMetrics" should {
@@ -63,55 +63,55 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
       val singleThreadPoolExecutor = JavaExecutors.newSingleThreadExecutor()
       val registeredPool = Executors.register("single-thread-pool", singleThreadPoolExecutor)
 
-      Metrics.Threads.valuesForTag("name")  should contain ("single-thread-pool")
-      Metrics.Threads.valuesForTag("type")  should contain ("tpe")
+      Metrics.threadsMetric.tagValues("name")  should contain ("single-thread-pool")
+      Metrics.threadsMetric.tagValues("type")  should contain ("tpe")
 
-      registeredPool.cancel()
+      registeredPool.close()
     }
 
     "register a ThreadPoolExecutor, collect their metrics and remove it" in {
       val threadPoolExecutor = JavaExecutors.newCachedThreadPool()
       val registeredPool = Executors.register("thread-pool-executor", threadPoolExecutor)
 
-      Metrics.Threads.valuesForTag("name")  should contain ("thread-pool-executor")
-      Metrics.Threads.valuesForTag("type")  should contain ("tpe")
+      Metrics.threadsMetric.tagValues("name")  should contain ("thread-pool-executor")
+      Metrics.threadsMetric.tagValues("type")  should contain ("tpe")
 
-      registeredPool.cancel()
+      registeredPool.close()
     }
 
     "register a ScheduledThreadPoolExecutor, collect their metrics and remove it" in {
       val scheduledThreadPoolExecutor = JavaExecutors.newSingleThreadScheduledExecutor()
       val registeredPool = Executors.register("scheduled-thread-pool-executor", scheduledThreadPoolExecutor)
 
-      Metrics.Threads.valuesForTag("name")  should contain ("scheduled-thread-pool-executor")
-      Metrics.Threads.valuesForTag("type")  should contain ("tpe")
+      Metrics.threadsMetric.tagValues("name")  should contain ("scheduled-thread-pool-executor")
+      Metrics.threadsMetric.tagValues("type")  should contain ("tpe")
 
-      registeredPool.cancel()
+      registeredPool.close()
     }
 
     "register a ForkJoinPool, collect their metrics and remove it" in {
       val javaForkJoinPool = Executors.instrument(JavaExecutors.newWorkStealingPool())
       val registeredForkJoin = Executors.register("java-fork-join-pool", javaForkJoinPool)
 
-      Metrics.Threads.valuesForTag("name")  should contain ("java-fork-join-pool")
-      Metrics.Threads.valuesForTag("type")  should contain ("fjp")
+      Metrics.threadsMetric.tagValues("name")  should contain ("java-fork-join-pool")
+      Metrics.threadsMetric.tagValues("type")  should contain ("fjp")
 
-      registeredForkJoin.cancel()
+      registeredForkJoin.close()
     }
 
     "register a Scala ForkJoinPool, collect their metrics and remove it" in {
       val scalaForkJoinPool = Executors.instrument(new scala.concurrent.forkjoin.ForkJoinPool(10))
       val registeredForkJoin = Executors.register("scala-fork-join-pool", scalaForkJoinPool)
 
-      Metrics.Threads.valuesForTag("name")  should contain ("scala-fork-join-pool")
-      Metrics.Threads.valuesForTag("type")  should contain ("fjp")
+      Metrics.threadsMetric.tagValues("name")  should contain ("scala-fork-join-pool")
+      Metrics.threadsMetric.tagValues("type")  should contain ("fjp")
 
-      registeredForkJoin.cancel()
+      registeredForkJoin.close()
     }
 
   }
 
-  def setupTestPool(executor: ExecutorService): (ExecutorService, ExecutorMetrics, Registration) = {
+  def setupTestPool(executor: ExecutorService): (ExecutorService, ExecutorMetrics, Closeable) = {
     val typeTag = executor match {
       case javaFjp:ForkJoinPool                             => "fjp"
       case scalaFjp: scala.concurrent.forkjoin.ForkJoinPool => "fjp"
@@ -130,7 +130,7 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
     "track settings" in {
       val (pool, metrics, registration) = setupTestPool(executor(size))
       eventually(metrics.poolMax() should be (size))
-      registration.cancel()
+      registration.close()
     }
 
     "track tasks" in {
@@ -162,7 +162,7 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
       eventually {
         (metrics.tasksSubmitted(), metrics.tasksCompleted()) should be (11, 11)
       }
-      registration.cancel()
+      registration.close()
     }
 
     "track threads" in {
@@ -183,7 +183,7 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
         metrics.threadsActive().max should be (2)
         metrics.threadsTotal().max should be (2)
       }
-      registration.cancel()
+      registration.close()
     }
 
     "track queue" in {
@@ -207,7 +207,7 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
         metrics.queue().max should be >= (100 - activeThreads)
       }
 
-      registration.cancel()
+      registration.close()
     }
   }
 
@@ -218,7 +218,7 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
         metrics.poolParallelism() should be (size)
         metrics.poolMin() should be (0)
       }
-      registration.cancel()
+      registration.close()
     }
   }
   def tpeMetrics(executor: Int => ExecutorService, size: Int) = {
@@ -227,7 +227,7 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with MetricInspection w
       eventually {
         metrics.poolCoreSize() should be (size)
         metrics.poolMin() should be (size)
-        registration.cancel()
+        registration.close()
 
       }
     }
