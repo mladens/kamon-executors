@@ -15,23 +15,43 @@
 
 package kamon.executors
 
-import kamon.metric.{Counter, Gauge, Histogram, Metric}
+import kamon.metric.{Counter, Gauge, Histogram}
 import kamon.tag.TagSet
 import kamon.Kamon
 
 object Metrics {
+  val poolMetric = Kamon.gauge("executor.pool")
+  val threadsMetric = Kamon.histogram("executor.threads")
+  val tasksMetric = Kamon.counter("executor.tasks")
+  val queueMetric = Kamon.histogram("executor.queue")
+}
 
-  def pool(tpe: String, name: String): Gauge = Kamon.gauge("executor.pool").withTag("type", tpe).withTag("name", name)
-  def threads(tpe: String, name: String): Histogram = Kamon.histogram("executor.threads").withTag("type", tpe).withTag("name", name)
-  def tasks(tpe: String, name: String): Counter = Kamon.counter("executor.tasks").withTag("type", tpe).withTag("name", name)
-  def queue(tpe: String, name: String): Histogram = Kamon.histogram("executor.queue").withTag("type", tpe).withTag("name", name)
+
+
+object Instruments {
+  import Metrics._
+
+  private def pool(tpe: String, name: String)= poolMetric.withTag("type", tpe).withTag("name", name)
+  private def threads(tpe: String, name: String) = threadsMetric.withTag("type", tpe).withTag("name", name)
+  private def tasks(tpe: String, name: String) = tasksMetric.withTag("type", tpe).withTag("name", name)
+  private def queue(tpe: String, name: String) = queueMetric.withTag("type", tpe).withTag("name", name)
+
+  trait PoolMetrics {
+    val poolMin: Gauge
+    val poolMax: Gauge
+    val poolSize: Histogram
+    val activeThreads: Histogram
+    val submittedTasks: Counter
+    val processedTasks: Counter
+    val queuedTasks: Histogram
+  }
 
   def forkJoinPool(name: String, tags: TagSet): ForkJoinPoolMetrics = {
     val poolType = "fjp"
-    val Pool = pool(poolType, name)
-    val Threads = threads(poolType, name)
-    val Tasks = tasks(poolType, name)
-    val Queue = queue(poolType, name)
+    val Pool = pool(poolType, name).withTags(tags)
+    val Threads = threads(poolType, name).withTags(tags)
+    val Tasks = tasks(poolType, name).withTags(tags)
+    val Queue = queue(poolType, name).withTags(tags)
 
     ForkJoinPoolMetrics(
       Pool.withTag("setting", "min"),
@@ -54,7 +74,7 @@ object Metrics {
     processedTasks: Counter,
     queuedTasks: Histogram,
     parallelism: Gauge
-  ) {
+  ) extends PoolMetrics {
 
     def cleanup(): Unit = {
       poolMin.remove()
@@ -69,14 +89,12 @@ object Metrics {
 
   }
 
-
   def threadPool(name: String, tags: TagSet): ThreadPoolMetrics = {
     val poolType = "tpe"
-    val Pool = pool(poolType, name)
-    val Threads = threads(poolType, name)
-    val Tasks = tasks(poolType, name)
-    val Queue = queue(poolType, name)
-
+    val Pool = pool(poolType, name).withTags(tags)
+    val Threads = threads(poolType, name).withTags(tags)
+    val Tasks = tasks(poolType, name).withTags(tags)
+    val Queue = queue(poolType, name).withTags(tags)
 
     ThreadPoolMetrics(
       Pool.withTag("setting", "min"),
@@ -90,7 +108,6 @@ object Metrics {
     )
   }
 
-
   case class ThreadPoolMetrics(
     poolMin: Gauge,
     poolMax: Gauge,
@@ -100,7 +117,7 @@ object Metrics {
     processedTasks: Counter,
     queuedTasks: Histogram,
     corePoolSize: Gauge
-  ) {
+  ) extends PoolMetrics {
 
     def cleanup(): Unit = {
       poolMin.remove()

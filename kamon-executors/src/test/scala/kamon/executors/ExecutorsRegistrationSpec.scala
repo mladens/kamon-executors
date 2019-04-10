@@ -35,7 +35,7 @@ class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspec
       val registeredUThreadPool = Executors.register("unconfigurable-thread-pool", JavaExecutors.unconfigurableExecutorService(JavaExecutors.newFixedThreadPool(1)))
       val registeredUScheduled = Executors.register("unconfigurable-scheduled-thread-pool", JavaExecutors.unconfigurableScheduledExecutorService(JavaExecutors.newScheduledThreadPool(1)))
 
-      threadsMetric.tagValues("name") should contain only(
+      Metrics.threadsMetric.tagValues("name") should contain only(
         "fjp",
         "thread-pool",
         "scheduled-thread-pool",

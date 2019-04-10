@@ -5,6 +5,6 @@ import kamon.tag.TagSet
 
 trait ContextTesting {
   val TestKey = "testkey"
-  def testContext(value: String) = Context.of(TagSet.from(TestKey, value))
+  def testContext(value: String) = Context.of(TagSet.of(TestKey, value))
 }
 

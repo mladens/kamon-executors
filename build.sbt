@@ -13,8 +13,8 @@
  * =========================================================================================
  */
 
-val kamonCore       = "io.kamon" %% "kamon-core"              % "1.2.0-dac3c1452afddd13392f20550761b60ee536a075"
-val kamonTestkit    = "io.kamon" %% "kamon-testkit"           % "1.2.0-dac3c1452afddd13392f20550761b60ee536a075"
+val kamonCore       = "io.kamon" %% "kamon-core"              % "2.0.0-986202d3e774e33872059e22d9f01d883c995145"
+val kamonTestkit    = "io.kamon" %% "kamon-testkit"           % "2.0.0-986202d3e774e33872059e22d9f01d883c995145"
 
 val kanelaScala     = "io.kamon" %% "kanela-scala-extension"  % "0.0.14"
 
@@ -28,7 +28,8 @@ lazy val root = (project in file("."))
 val commonSettings = Seq(
   scalaVersion := "2.12.6",
   resolvers += Resolver.mavenLocal,
-  crossScalaVersions := Seq("2.12.6", "2.11.12", "2.10.7")
+  resolvers += Resolver.bintrayRepo("kamon-io", "snapshots"),
+  crossScalaVersions := Seq("2.12.6"/*, "2.11.12", "2.10.7"*/)
 )
 
 lazy val executors = (project in file("kamon-executors"))

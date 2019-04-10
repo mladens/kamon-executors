@@ -97,44 +97,44 @@ object Executors {
     expectedClass.isAssignableFrom(executor.getClass)
 
   private def threadPoolSampler(name: String, tags: TagSet, pool: ThreadPoolExecutor): ExecutorSampler = new ExecutorSampler {
-    val poolMetrics = Metrics.threadPool(name, tags)
+    val poolInstruments = Instruments.threadPool(name, tags)
     val taskCountSource = Counter.delta(() => pool.getTaskCount)
     val completedTaskCountSource = Counter.delta(() => pool.getCompletedTaskCount)
 
     def sample(): Unit = {
-      poolMetrics.poolMin.set(pool.getCorePoolSize)
-      poolMetrics.poolMax.set(pool.getMaximumPoolSize)
-      poolMetrics.poolSize.record(pool.getPoolSize)
-      poolMetrics.activeThreads.record(pool.getActiveCount)
-      taskCountSource.accept(poolMetrics.submittedTasks)
-      completedTaskCountSource.accept(poolMetrics.processedTasks)
-      poolMetrics.queuedTasks.record(pool.getQueue.size())
-      poolMetrics.corePoolSize.set(pool.getCorePoolSize())
+      poolInstruments.poolMin.update(pool.getCorePoolSize)
+      poolInstruments.poolMax.update(pool.getMaximumPoolSize)
+      poolInstruments.poolSize.record(pool.getPoolSize)
+      poolInstruments.activeThreads.record(pool.getActiveCount)
+      taskCountSource.accept(poolInstruments.submittedTasks)
+      completedTaskCountSource.accept(poolInstruments.processedTasks)
+      poolInstruments.queuedTasks.record(pool.getQueue.size())
+      poolInstruments.corePoolSize.update(pool.getCorePoolSize())
     }
 
     def cleanup(): Unit =
-      poolMetrics.cleanup()
+      poolInstruments.cleanup()
   }
 
   private def forkJoinPoolSampler(name: String, tags: TagSet, pool: InstrumentedExecutorService[_]): ExecutorSampler = new ExecutorSampler {
-    val poolMetrics = Metrics.forkJoinPool(name, tags)
+    val poolInstruments = Instruments.forkJoinPool(name, tags)
 
     val taskCountSource = Counter.delta(() => pool.submittedTasks)
     val completedTaskCountSource = Counter.delta(() => pool.processedTasks)
 
     def sample(): Unit = {
-      poolMetrics.poolMax.set(pool.maxThreads)
-      poolMetrics.poolMin.set(pool.minThreads)
-      poolMetrics.parallelism.set(pool.parallelism)
-      poolMetrics.poolSize.record(pool.poolSize)
-      poolMetrics.activeThreads.record(pool.activeThreads)
-      taskCountSource.accept(poolMetrics.submittedTasks)
-      completedTaskCountSource.accept(poolMetrics.processedTasks)
-      poolMetrics.queuedTasks.record(pool.queuedTasks)
+      poolInstruments.poolMax.update(pool.maxThreads)
+      poolInstruments.poolMin.update(pool.minThreads)
+      poolInstruments.parallelism.update(pool.parallelism)
+      poolInstruments.poolSize.record(pool.poolSize)
+      poolInstruments.activeThreads.record(pool.activeThreads)
+      taskCountSource.accept(poolInstruments.submittedTasks)
+      completedTaskCountSource.accept(poolInstruments.processedTasks)
+      poolInstruments.queuedTasks.record(pool.queuedTasks)
     }
 
     def cleanup(): Unit =
-      poolMetrics.cleanup()
+      poolInstruments.cleanup()
   }
 
 
