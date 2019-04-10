@@ -19,6 +19,8 @@ import org.scalatest.{Matchers, WordSpec}
 import java.util.concurrent.{Executors => JavaExecutors, ForkJoinPool => JavaForkJoinPool}
 
 import Metrics._
+import com.typesafe.config.{Config, ConfigFactory}
+import kamon.Kamon
 import kamon.testkit.MetricInspection
 
 class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspection.Syntax {
@@ -26,6 +28,10 @@ class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspec
   "the Executors registration function" should {
     "accept all types of known executors" in {
 
+      Kamon.reconfigure(
+        ConfigFactory.parseString("kamon.metric.tick-interval=1s")
+          .withFallback(Kamon.config())
+      )
 
       val registeredForkJoin  = Executors.register("fjp", Executors.instrument(new JavaForkJoinPool(1)))
       val registeredThreadPool = Executors.register("thread-pool", JavaExecutors.newFixedThreadPool(1))
@@ -35,7 +41,7 @@ class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspec
       val registeredUThreadPool = Executors.register("unconfigurable-thread-pool", JavaExecutors.unconfigurableExecutorService(JavaExecutors.newFixedThreadPool(1)))
       val registeredUScheduled = Executors.register("unconfigurable-scheduled-thread-pool", JavaExecutors.unconfigurableScheduledExecutorService(JavaExecutors.newScheduledThreadPool(1)))
 
-      Metrics.threadsMetric.tagValues("name") should contain only(
+      threadsMetric.tagValues("name") should contain only(
         "fjp",
         "thread-pool",
         "scheduled-thread-pool",
@@ -52,6 +58,8 @@ class ExecutorsRegistrationSpec extends WordSpec with Matchers with MetricInspec
       registeredSingleScheduled.close()
       registeredUThreadPool.close()
       registeredUScheduled.close()
+
+      Thread.sleep(2000)
 
       threadsMetric.tagValues("name") shouldBe empty
       tasksMetric.tagValues("name") shouldBe empty

@@ -13,8 +13,8 @@
  * =========================================================================================
  */
 
-val kamonCore       = "io.kamon" %% "kamon-core"              % "2.0.0-986202d3e774e33872059e22d9f01d883c995145"
-val kamonTestkit    = "io.kamon" %% "kamon-testkit"           % "2.0.0-986202d3e774e33872059e22d9f01d883c995145"
+val kamonCore       = "io.kamon" %% "kamon-core"              % "2.0.0-7dd537de1b5654d5f0d019f076edccb757775f4d"
+val kamonTestkit    = "io.kamon" %% "kamon-testkit"           % "2.0.0-7dd537de1b5654d5f0d019f076edccb757775f4d"
 
 val kanelaScala     = "io.kamon" %% "kanela-scala-extension"  % "0.0.14"
 

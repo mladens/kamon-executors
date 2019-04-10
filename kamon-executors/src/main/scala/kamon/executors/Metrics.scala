@@ -31,10 +31,18 @@ object Metrics {
 object Instruments {
   import Metrics._
 
-  private def pool(tpe: String, name: String)= poolMetric.withTag("type", tpe).withTag("name", name)
-  private def threads(tpe: String, name: String) = threadsMetric.withTag("type", tpe).withTag("name", name)
-  private def tasks(tpe: String, name: String) = tasksMetric.withTag("type", tpe).withTag("name", name)
-  private def queue(tpe: String, name: String) = queueMetric.withTag("type", tpe).withTag("name", name)
+  private def pool(tpe: String, name: String, tags: TagSet)= poolMetric.withTags(
+    TagSet.of("type", tpe).withTag("name", name).withTags(tags)
+  )
+  private def threads(tpe: String, name: String, tags: TagSet) = threadsMetric.withTags(
+    TagSet.of("type", tpe).withTag("name", name).withTags(tags)
+  )
+  private def tasks(tpe: String, name: String, tags: TagSet) = tasksMetric.withTags(
+    TagSet.of("type", tpe).withTag("name", name).withTags(tags)
+  )
+  private def queue(tpe: String, name: String, tags: TagSet) = queueMetric.withTags(
+    TagSet.of("type", tpe).withTag("name", name).withTags(tags)
+  )
 
   trait PoolMetrics {
     val poolMin: Gauge
@@ -48,20 +56,16 @@ object Instruments {
 
   def forkJoinPool(name: String, tags: TagSet): ForkJoinPoolMetrics = {
     val poolType = "fjp"
-    val Pool = pool(poolType, name).withTags(tags)
-    val Threads = threads(poolType, name).withTags(tags)
-    val Tasks = tasks(poolType, name).withTags(tags)
-    val Queue = queue(poolType, name).withTags(tags)
 
     ForkJoinPoolMetrics(
-      Pool.withTag("setting", "min"),
-      Pool.withTag("setting", "max"),
-      Threads.withTag("state", "total"),
-      Threads.withTag("state", "active"),
-      Tasks.withTag("state", "submitted"),
-      Tasks.withTag("state", "completed"),
-      Queue,
-      Pool.withTag("setting", "parallelism")
+      pool(poolType, name, TagSet.of("setting", "min").withTags(tags)),
+      pool(poolType, name, TagSet.of("setting", "max").withTags(tags)),
+      threads(poolType, name, TagSet.of("state", "total").withTags(tags)),
+      threads(poolType, name, TagSet.of("state", "active").withTags(tags)),
+      tasks(poolType, name,  TagSet.of("state", "submitted").withTags(tags)),
+      tasks(poolType, name, TagSet.of("state", "completed").withTags(tags)),
+      queue(poolType, name, tags),
+      pool(poolType, name, TagSet.of("setting", "parallelism").withTags(tags))
     )
   }
 
@@ -91,20 +95,16 @@ object Instruments {
 
   def threadPool(name: String, tags: TagSet): ThreadPoolMetrics = {
     val poolType = "tpe"
-    val Pool = pool(poolType, name).withTags(tags)
-    val Threads = threads(poolType, name).withTags(tags)
-    val Tasks = tasks(poolType, name).withTags(tags)
-    val Queue = queue(poolType, name).withTags(tags)
 
     ThreadPoolMetrics(
-      Pool.withTag("setting", "min"),
-      Pool.withTag("setting", "max"),
-      Threads.withTag("state", "total"),
-      Threads.withTag("state", "active"),
-      Tasks.withTag("state","submitted"),
-      Tasks.withTag("state", "completed"),
-      Queue,
-      Pool.withTag("setting", "corePoolSize")
+      pool(poolType, name, TagSet.of("setting", "min").withTags(tags)),
+      pool(poolType, name, TagSet.of("setting", "max").withTags(tags)),
+      threads(poolType, name, TagSet.of("state", "total").withTags(tags)),
+      threads(poolType, name, TagSet.of("state", "active").withTags(tags)),
+      tasks(poolType, name, TagSet.of("state","submitted").withTags(tags)),
+      tasks(poolType, name, TagSet.of("state", "completed").withTags(tags)),
+      queue(poolType, name, tags),
+      pool(poolType, name, TagSet.of("setting", "corePoolSize").withTags(tags))
     )
   }
 
