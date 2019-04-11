@@ -41,7 +41,6 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with InstrumentInspecti
   implicit override val patienceConfig =
     PatienceConfig(timeout = scaled(Span(2000, Millis)), interval = scaled(Span(20, Millis)))
 
-/*
 
   "the ExecutorServiceMetrics" should {
     "register a SingleThreadPool, collect their metrics and remove it" in {
@@ -95,7 +94,6 @@ class ExecutorMetricsSpec extends WordSpec with Matchers with InstrumentInspecti
     }
 
   }
-*/
 
   class TestPool(val executor: ExecutorService) {
     val name = s"testExecutor-${UUID.randomUUID()}"
