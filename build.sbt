@@ -13,8 +13,8 @@
  * =========================================================================================
  */
 
-val kamonCore       = "io.kamon" %% "kamon-core"              % "2.0.0-7dd537de1b5654d5f0d019f076edccb757775f4d"
-val kamonTestkit    = "io.kamon" %% "kamon-testkit"           % "2.0.0-7dd537de1b5654d5f0d019f076edccb757775f4d"
+val kamonCore           = "io.kamon"            %% "kamon-core"               % "2.0.0-d2d5cb18261e2c79b86340bf39524394700415e8"
+val kamonTestkit        = "io.kamon"            %% "kamon-testkit"            % "2.0.0-d2d5cb18261e2c79b86340bf39524394700415e8"
 
 val kanelaScala     = "io.kamon" %% "kanela-scala-extension"  % "0.0.14"
 
@@ -53,3 +53,5 @@ lazy val benchmark = (project in file("kamon-executors-bench"))
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= compileScope(guava))
   .dependsOn(executors)
+
+
